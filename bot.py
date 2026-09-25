@@ -1,5 +1,20 @@
 import os
 import sys
+from pathlib import Path
+
+# Ensure project root is always at the top of sys.path on any platform or cloud provider
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+# Force UTF-8 stdout and stderr safely on all platforms
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
+        except Exception:
+            pass
+
 import asyncio
 import logging
 from aiohttp import web
@@ -11,14 +26,6 @@ from config import BOT_TOKEN
 from database.db import db
 from handlers import routers
 from locales.texts import t
-
-# Force UTF-8 stdout and stderr safely on all platforms
-for stream in (sys.stdout, sys.stderr):
-    if hasattr(stream, "reconfigure"):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace", line_buffering=True)
-        except Exception:
-            pass
 
 logging.basicConfig(
     level=logging.INFO,

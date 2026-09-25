@@ -20,5 +20,8 @@ if SUPER_ADMIN_ID not in ADMIN_IDS:
 channels_raw = os.getenv("REQUIRED_CHANNELS", "")
 REQUIRED_CHANNELS = [x.strip() for x in channels_raw.split(",") if x.strip()]
 
+MIN_STARS = int(os.getenv("MIN_STARS", "1"))
+MAX_STARS = int(os.getenv("MAX_STARS", "10000"))
+
 DB_PATH = BASE_DIR / os.getenv("DB_PATH", "data/bot.db")
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
