@@ -1,4 +1,5 @@
 import os
+import sys
 import asyncio
 import logging
 from aiohttp import web
@@ -13,7 +14,8 @@ from locales.texts import t
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
 
@@ -44,9 +46,9 @@ async def start_health_server():
         await runner.setup()
         site = web.TCPSite(runner, "0.0.0.0", port)
         await site.start()
-        logger.info(f"🌐 Health-check server started on port {port} (Render / Cloud ready)")
+        logger.info(f"🌐 Health-check server successfully started on port {port}")
     except Exception as e:
-        logger.warning(f"⚠️ Health-check server start warning: {e}")
+        logger.error(f"❌ Failed to start health-check server: {e}", exc_info=True)
 
 async def setup_bot_profile(bot: Bot):
     """
@@ -89,15 +91,21 @@ async def on_startup(bot: Bot):
     logger.info("⚙️ Bot profili va sozlamalari yangilanmoqda...")
     await setup_bot_profile(bot)
 
-    # Start health server for Render / Cloud if PORT is set
-    await start_health_server()
-
     bot_info = await bot.get_me()
     logger.info(f"🌟 Bot muvaffaqiyatli ishga tushdi: @{bot_info.username} (ID: {bot_info.id})")
 
 async def main():
+    logger.info("🚀 Bot tizimi ishga tushmoqda...")
+
+    # Start health server immediately for Render
+    await start_health_server()
+
     if not BOT_TOKEN or "TOKEN" in BOT_TOKEN:
         logger.error("❌ BOT_TOKEN topilmadi yoki noto'g'ri ko'rsatilgan (.env faylini tekshiring)!")
+        if os.getenv("PORT"):
+            logger.warning("⚠️ Web server ochiq saqlanadi, iltimos BOT_TOKEN ni sozlang.")
+            while True:
+                await asyncio.sleep(3600)
         return
 
     bot = Bot(
@@ -117,11 +125,24 @@ async def main():
         # Delete webhook and start polling
         await bot.delete_webhook(drop_pending_updates=True)
         await dp.start_polling(bot)
+    except Exception as e:
+        logger.error(f"❌ Polling xatosi: {e}", exc_info=True)
+        if os.getenv("PORT"):
+            while True:
+                await asyncio.sleep(3600)
     finally:
         await bot.session.close()
 
 if __name__ == "__main__":
     try:
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(line_buffering=True)
+    except Exception:
+        pass
+
+    try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("🛑 Bot to'xtatildi.")
+    except Exception as e:
+        logger.critical(f"💥 Kritik xatolik: {e}", exc_info=True)
