@@ -73,22 +73,42 @@ async def start_health_server():
 
 async def setup_bot_profile(bot: Bot):
     """
-    Configure the Bot's Bio, Description and Command list.
+    Configure the Bot's Bio, Description and Command list in pure Uzbek.
     """
     try:
-        await bot.set_my_short_description(short_description=t("bot_bio", "uz"))
-        await bot.set_my_description(description=t("bot_description", "uz"))
+        desc_uz = (
+            "🌟 Telegram Stars Ishlash Botiga xush kelibsiz!\n\n"
+            "Do'stlaringizni taklif qiling va har bir do'stingiz uchun hisobingizga Telegram Stars oling! 💫\n\n"
+            "Boshlash uchun pastdagi «Start» tugmasini bosing 👇"
+        )
+        bio_uz = "⭐ Do'stlarni taklif qilib Telegram Stars ishlang! Rasmiy Stars boti."
+        name_uz = "⭐ STARS ISHLASH BOT"
+
+        for lang_code in ["", "uz", "ru", "en"]:
+            try:
+                await bot.set_my_description(description=desc_uz, language_code=lang_code or None)
+            except Exception:
+                pass
+            try:
+                await bot.set_my_short_description(short_description=bio_uz, language_code=lang_code or None)
+            except Exception:
+                pass
+            try:
+                await bot.set_my_name(name=name_uz, language_code=lang_code or None)
+            except Exception:
+                pass
+
         commands = [
-            BotCommand(command="start", description="Botni ishga tushirish / Start"),
-            BotCommand(command="stars", description="Stars ishlash / Earn Stars"),
-            BotCommand(command="profile", description="Profil & Hamyon / Profile"),
-            BotCommand(command="leaderboard", description="Top Reyting / Leaderboard"),
-            BotCommand(command="language", description="Tilni tanlash / Language"),
-            BotCommand(command="help", description="Yordam / Help"),
+            BotCommand(command="start", description="Botni ishga tushirish"),
+            BotCommand(command="stars", description="Stars ishlash"),
+            BotCommand(command="profile", description="Profil va Hamyon"),
+            BotCommand(command="leaderboard", description="Top Reyting"),
+            BotCommand(command="language", description="Tilni tanlash"),
+            BotCommand(command="help", description="Yordam"),
             BotCommand(command="admin", description="Admin Panel"),
         ]
         await bot.set_my_commands(commands=commands, scope=BotCommandScopeDefault())
-        print("[BOT] [OK] Bot commands and profile updated successfully.", flush=True)
+        print("[BOT] [OK] Bot commands and profile updated in Uzbek successfully.", flush=True)
     except Exception as e:
         print(f"[BOT WARNING] Could not update profile/commands: {e}", flush=True)
 
