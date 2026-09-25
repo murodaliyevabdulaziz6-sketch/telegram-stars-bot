@@ -12,62 +12,60 @@ from database.db import db
 from handlers import routers
 from locales.texts import t
 
+# Force unbuffered stdout so Render shows every single log line immediately
+sys.stdout.reconfigure(line_buffering=True)
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+    format="%(asctime)s - %(levelname)s - %(message)s",
     stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
 
+async def handle_ping(request):
+    return web.Response(
+        text="⭐️ Telegram Stars Bot is running 24/7! OK\n",
+        content_type="text/plain"
+    )
+
+def create_web_app():
+    app = web.Application()
+    app.router.add_get("/", handle_ping)
+    app.router.add_get("/health", handle_ping)
+    app.router.add_get("/ping", handle_ping)
+    return app
+
 async def start_health_server():
     """
-    Starts a light HTTP health server when deployed on Render / Koyeb (when PORT is provided).
-    This keeps Render Free Web Service running 24/7 without port binding errors.
+    Starts HTTP server immediately on 0.0.0.0:$PORT (default 10000).
+    Render checks this port to verify the service is Live.
     """
-    port_str = os.getenv("PORT")
-    if not port_str:
-        return
-
+    port_str = os.getenv("PORT", "10000")
     try:
         port = int(port_str)
     except ValueError:
-        return
+        port = 10000
 
+    print(f"[RENDER] Starting HTTP Health Server on port {port}...", flush=True)
     try:
-        app = web.Application()
-
-        async def handle_ping(request):
-            return web.Response(text="⭐️ Telegram Stars Bot is running 24/7! OK")
-
-        app.router.add_get("/", handle_ping)
-        app.router.add_get("/health", handle_ping)
-
+        app = create_web_app()
         runner = web.AppRunner(app)
         await runner.setup()
         site = web.TCPSite(runner, "0.0.0.0", port)
         await site.start()
-        logger.info(f"🌐 Health-check server successfully started on port {port}")
+        print(f"[RENDER] ✅ HTTP Health Server is LIVE on 0.0.0.0:{port}!", flush=True)
+        return runner
     except Exception as e:
-        logger.error(f"❌ Failed to start health-check server: {e}", exc_info=True)
+        print(f"[RENDER WARNING] Could not bind port {port}: {e}", flush=True)
+        return None
 
 async def setup_bot_profile(bot: Bot):
     """
-    Automatically configure the Bot's Bio, Description and Command list via Telegram Bot API.
+    Configure the Bot's Bio, Description and Command list.
     """
     try:
-        # 1. Set Bot Short Description (Bio shown on profile)
-        await bot.set_my_short_description(
-            short_description=t("bot_bio", "uz")
-        )
-        logger.info("✅ Bot Bio (Short Description) updated successfully.")
-
-        # 2. Set Bot Detailed Description (Shown before pressing Start)
-        await bot.set_my_description(
-            description=t("bot_description", "uz")
-        )
-        logger.info("✅ Bot Description updated successfully.")
-
-        # 3. Set Bot Commands
+        await bot.set_my_short_description(short_description=t("bot_bio", "uz"))
+        await bot.set_my_description(description=t("bot_description", "uz"))
         commands = [
             BotCommand(command="start", description="🚀 Botni ishga tushirish / Start"),
             BotCommand(command="stars", description="⭐ Stars ishlash / Earn Stars"),
@@ -78,35 +76,49 @@ async def setup_bot_profile(bot: Bot):
             BotCommand(command="admin", description="🛠 Admin Panel"),
         ]
         await bot.set_my_commands(commands=commands, scope=BotCommandScopeDefault())
-        logger.info("✅ Bot Commands menu updated successfully.")
-
+        print("[BOT] ✅ Bot commands and profile updated successfully.", flush=True)
     except Exception as e:
-        logger.warning(f"⚠️ Error while setting bot profile: {e}")
+        print(f"[BOT WARNING] Could not update profile/commands: {e}", flush=True)
 
-async def on_startup(bot: Bot):
-    logger.info("🚀 Database initsializatsiya qilinmoqda...")
+async def run_bot_polling(bot: Bot, dp: Dispatcher):
+    """
+    Runs database init and Telegram bot polling loop with automatic reconnect.
+    """
+    print("[BOT] Initializing database...", flush=True)
     await db.init_db()
-    logger.info("✅ Ma'lumotlar bazasi tayyor.")
+    print("[BOT] ✅ Database is ready.", flush=True)
 
-    logger.info("⚙️ Bot profili va sozlamalari yangilanmoqda...")
+    print("[BOT] Configuring profile...", flush=True)
     await setup_bot_profile(bot)
 
-    bot_info = await bot.get_me()
-    logger.info(f"🌟 Bot muvaffaqiyatli ishga tushdi: @{bot_info.username} (ID: {bot_info.id})")
+    try:
+        bot_info = await bot.get_me()
+        print(f"[BOT] 🌟 Connected as @{bot_info.username} (ID: {bot_info.id})", flush=True)
+    except Exception as e:
+        print(f"[BOT WARNING] Could not fetch bot info: {e}", flush=True)
+
+    while True:
+        try:
+            print("[BOT] Starting Telegram polling...", flush=True)
+            await bot.delete_webhook(drop_pending_updates=True)
+            await dp.start_polling(bot)
+        except Exception as e:
+            print(f"[BOT POLLING ERROR] {e}. Reconnecting in 10 seconds...", flush=True)
+            await asyncio.sleep(10)
 
 async def main():
-    logger.info("🚀 Bot tizimi ishga tushmoqda...")
+    print("========================================", flush=True)
+    print("🚀 TELEGRAM STARS BOT STARTING...", flush=True)
+    print("========================================", flush=True)
 
-    # Start health server immediately for Render
-    await start_health_server()
+    # 1. Start HTTP Server immediately so Render healthcheck succeeds instantly
+    health_runner = await start_health_server()
 
-    if not BOT_TOKEN or "TOKEN" in BOT_TOKEN:
-        logger.error("❌ BOT_TOKEN topilmadi yoki noto'g'ri ko'rsatilgan (.env faylini tekshiring)!")
-        if os.getenv("PORT"):
-            logger.warning("⚠️ Web server ochiq saqlanadi, iltimos BOT_TOKEN ni sozlang.")
-            while True:
-                await asyncio.sleep(3600)
-        return
+    if not BOT_TOKEN:
+        print("[FATAL] BOT_TOKEN environment variable is missing!", flush=True)
+        # Keep web server running so Render service does not crash
+        while True:
+            await asyncio.sleep(3600)
 
     bot = Bot(
         token=BOT_TOKEN,
@@ -114,35 +126,21 @@ async def main():
     )
     dp = Dispatcher()
 
-    # Register all routers
     for router in routers:
         dp.include_router(router)
 
-    # Startup hook
-    dp.startup.register(on_startup)
-
+    # 2. Run bot polling concurrently
     try:
-        # Delete webhook and start polling
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
-    except Exception as e:
-        logger.error(f"❌ Polling xatosi: {e}", exc_info=True)
-        if os.getenv("PORT"):
-            while True:
-                await asyncio.sleep(3600)
+        await run_bot_polling(bot, dp)
     finally:
+        if health_runner:
+            await health_runner.cleanup()
         await bot.session.close()
 
 if __name__ == "__main__":
     try:
-        if hasattr(sys.stdout, "reconfigure"):
-            sys.stdout.reconfigure(line_buffering=True)
-    except Exception:
-        pass
-
-    try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
-        logger.info("🛑 Bot to'xtatildi.")
+        print("[STOP] Bot stopped.", flush=True)
     except Exception as e:
-        logger.critical(f"💥 Kritik xatolik: {e}", exc_info=True)
+        print(f"[CRITICAL ERROR] {e}", flush=True)
