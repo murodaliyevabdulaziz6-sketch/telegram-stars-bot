@@ -1,0 +1,30 @@
+# Environment Variables (Maxfiy ma'lumotlar)
+.env
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Data & SQLite Database
+data/
+*.db
+*.sqlite3
+
+# Excel exports & Temporary files
+*.xlsx
+*.csv
+*.log
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE & OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
